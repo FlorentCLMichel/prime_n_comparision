@@ -2,58 +2,79 @@ use std::env;
 use std::io::{BufWriter, Write};
 use std::time::Instant;
 
+#[inline(always)]
 fn is_prime(n: u32) -> bool {
     if n < 2 {
-        false
-    } else if n < 4 {
-        true
-    } else {
-        let factor = (n as f32).sqrt() as u32;
-        !(2..factor + 1).any(|x| n % x == 0)
+        return false;
     }
+    if n == 2 {
+        return true;
+    }
+    if n % 2 == 0 {
+        return false;
+    }
+
+    // use u64 to avoid overflow for i*i
+    let n64 = n as u64;
+    let mut i: u64 = 3;
+
+    while i * i <= n64 {
+        if n64 % i == 0 {
+            return false;
+        }
+        i += 2;
+    }
+    true
 }
 
-fn gen_primes<F>(gen: u32, mut callback: F)
+#[inline(always)]
+fn gen_primes<F>(limit: u32, mut callback: F)
 where
     F: FnMut(u32, u32),
 {
-    let mut counter = 0;
-    let mut n = 0;
-    while counter < gen {
+    let mut count = 0;
+
+    // handle prime 2 separately
+    if limit > 0 {
+        count = 1;
+        callback(1, 2);
+    }
+
+    let mut n: u32 = 3;
+
+    while count < limit {
         if is_prime(n) {
-            counter += 1;
-            callback(counter, n);
+            count += 1;
+            callback(count, n);
         }
-        n += 1
+        n += 2; // skip evens
     }
 }
 
 fn main() {
-    let mut args = env::args();
-    args.next().unwrap();
-    let mut file_writer = BufWriter::new(
-        std::fs::File::options()
-            .create(true)
-            .write(true)
-            .truncate(true)
-            .open("./benchmark_rust")
-            .unwrap(),
-    );
-    let n = args.next().unwrap().parse::<u32>().unwrap();
-    let buckets = args.next().unwrap().parse::<u32>().unwrap();
+    let mut args = env::args().skip(1);
+
+    let n: u32 = args.next().unwrap().parse().unwrap();
+    let buckets: u32 = args.next().unwrap().parse().unwrap();
+
+    let file = std::fs::File::create("./benchmark_rust").unwrap();
+    let mut writer = BufWriter::new(file);
+
     let start = Instant::now();
-    gen_primes(n as u32, |counter: u32, prime_val: u32| {
-        if counter % buckets == 0 || counter == n {
-            let end_time = Instant::now();
-            write!(
-                file_writer,
+    let mut buffer = Vec::with_capacity((n as usize) * 24); // pre-alloc
+
+    gen_primes(n, |count, prime| {
+        if count % buckets == 0 || count == n {
+            let _ = write!(
+                &mut buffer,
                 "{},{},{}\n",
-                counter,
-                prime_val,
-                (end_time - start).as_nanos()
-            )
-            .unwrap();
+                count,
+                prime,
+                start.elapsed().as_nanos()
+            );
         }
     });
-    file_writer.flush().unwrap();
+
+    writer.write_all(&buffer).unwrap();
+    writer.flush().unwrap();
 }
