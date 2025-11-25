@@ -1,38 +1,57 @@
 #!/usr/bin/python3
 import sys
 import time
-import math
+from math import sqrt as _sqrt
 from typing import Callable
+# from numba import njit
 
-def is_prime(n:int)->bool:
-    if n==2:
-        return True
-    elif n<2 or n%2==0:
+# @njit
+def is_prime(n: int) -> bool:
+    if n < 2:
         return False
-    else:
-        sqrt = int(math.floor(math.sqrt(n)))+1
-        return not any(map(lambda x: n%x==0, range(3,sqrt,2)))
+    if n == 2:
+        return True
 
-def gen_primes(gen:int,callback:Callable[[int,int,int],None]):
-    counter=0
-    n=0
-    while counter<=gen:
-        if is_prime(n):
-            counter+=1
-            callback(counter,n,time.perf_counter_ns())
-        n+=1
+    mod = n % 2
+    if mod == 0:
+        return False
+
+    r = int(_sqrt(n))
+    for i in range(3, r + 1, 2):
+        if n % i == 0:
+            return False
+    return True
 
 
-def main(cum:int,width:int):
+def gen_primes(gen: int, callback: Callable[[int, int, int], None]):
+    counter = 0
+    n = 0
+
+    is_prime_local = is_prime
+    callback_local = callback
+    time_ns = time.perf_counter_ns
+
+    while counter <= gen:
+        if is_prime_local(n):
+            counter += 1
+            callback_local(counter, n, time_ns())
+        n += 1
+
+
+def main(cum: int, width: int):
     start = time.perf_counter_ns()
-    with open("./benchmark_python","w") as file:
-        def prime_callback(counter:int,prime_val:int,end_time:int):
-            f_str = f"{counter},{prime_val},{end_time-start}\n"
-            if not counter%width:
-                file.write(f_str)
-        gen_primes(cum,prime_callback)
-        file.flush()
-    
+    with open("./benchmark_python", "w") as file:
 
-if __name__=="__main__":
-    main(int(sys.argv[1]),int(sys.argv[2]))
+        write = file.write
+        modulo = width
+
+        def prime_callback(counter: int, prime_val: int, end_time: int):
+            if counter % modulo == 0:
+                write(f"{counter},{prime_val},{end_time - start}\n")
+
+        gen_primes(cum, prime_callback)
+        file.flush()
+
+
+if __name__ == "__main__":
+    main(int(sys.argv[1]), int(sys.argv[2]))
